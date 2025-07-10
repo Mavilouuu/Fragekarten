@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Fragenkarten</title>
+  <style>
+    body {
+      background-color: #2a2a2a;
+      color: white;
+      font-family: sans-serif;
+      padding: 2rem;
+      overflow-x: hidden;
+    }
+
+    h1 {
+      text-align: center;
+      color: #ff3366;
+      margin-bottom: 2rem;
+    }
+
+    .card-grid {
+      position: relative;
+      height: 360px;
+      margin-bottom: 4rem;
+    }
+
+    .used-stack {
+      position: relative;
+      min-height: 280px;
+      margin-top: 2rem;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+    }
+
+    .card {
+      width: 180px;
+      height: 260px;
+      perspective: 1000px;
+      cursor: pointer;
+      transition: transform 0.4s ease, left 0.4s, top 0.4s;
+      position: absolute;
+      border-radius: 1rem;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+      background-color: transparent;
+    }
+
+    .card-inner {
+      width: 100%;
+      height: 100%;
+      transition: transform 0.6s;
+      transform-style: preserve-3d;
+      position: relative;
+      border-radius: 1rem;
+    }
+
+    .card.flipped .card-inner {
+      transform: rotateY(180deg);
+    }
+
+    .card-front, .card-back {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      backface-visibility: hidden;
+      border-radius: 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      box-sizing: border-box;
+      font-weight: 600;
+      line-height: 1.4;
+    }
+
+    .card-front {
+      background: url('https://i.gyazo.com/85476442c79814c24c10a518771af89a.png') center center/cover no-repeat;
+    }
+
+    .card-back {
+      background: url('https://i.gyazo.com/a6610c5754376526eddb9ff0f4dacae2.jpg') center center/cover no-repeat;
+      background-color: rgba(0,0,0,0.6);
+      background-blend-mode: darken;
+      color: white;
+      transform: rotateY(180deg);
+      font-size: 1rem;
+      text-align: center;
+    }
+
+    .stacked-card {
+      position: absolute;
+      width: 180px;
+      height: 260px;
+      border-radius: 1rem;
+      background: url('https://i.gyazo.com/a6610c5754376526eddb9ff0f4dacae2.jpg') center center/cover no-repeat;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+      animation: drop 0.4s ease-out;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      font-size: 0.9rem;
+      text-align: center;
+    }
+
+    .blur-overlay {
+      position: fixed;
+      inset: 0;
+      backdrop-filter: blur(6px);
+      background-color: rgba(0, 0, 0, 0.4);
+      z-index: 10;
+      display: none;
+    }
+
+    .focus-card {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      width: 350px;
+      height: 500px;
+      transform: translate(-50%, -50%);
+      z-index: 11;
+      perspective: 1000px;
+      cursor: pointer;
+      display: none;
+    }
+
+    .focus-card .card {
+      width: 100%;
+      height: 100%;
+      transform: scale(1.05);
+    }
+
+    .focus-card .card-back {
+      font-size: 1.2rem;
+      backdrop-filter: blur(6px);
+      visibility: visible;
+      pointer-events: auto;
+    }
+
+    @keyframes drop {
+      from { transform: translateY(-50px) scale(0.8); opacity: 0; }
+      to { transform: translateY(0) scale(1); opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+
+<h1>Beziehungsfragen</h1>
+
+<div class="card-grid" id="cardGrid"></div>
+<div class="blur-overlay" id="blurOverlay"></div>
+
+<div class="focus-card" id="focusCard">
+  <div class="card flipped">
+    <div class="card-inner">
+      <div class="card-front"></div>
+      <div class="card-back" id="focusBackText"></div>
+    </div>
+  </div>
+</div>
+
+<div class="used-stack" id="usedStack"></div>
+
+<script>
+  const fragen = [
+    "Welche Erwartungen hast du an unsere Beziehung?",
+    "Was wünschst du dir für unsere Kommunikation?",
+    "Gibt es etwas, das du von mir brauchst, aber derzeit nicht bekommst?",
+    "Was wünschst du dir von mir für unsere Zukunft?",
+    "Was sollte ich niemals zu dir sagen – egal, wie wütend ich bin?",
+    "Was glaubst du ist unsere größte gemeinsame Stärke?",
+    "Was ist für dich der witzigste Moment, den wir gemeinsam erlebt haben?",
+    "Wann konnten wir uns vor Lachen kaum noch halten? Warum?",
+    "Was ist deine Lieblingsbeschäftigung für uns beide?",
+    "Was glaubst du ist unsere größte gemeinsame Schwäche?"
+  ];
+
+  const cardGrid = document.getElementById("cardGrid");
+  const usedStack = document.getElementById("usedStack");
+  const blurOverlay = document.getElementById("blurOverlay");
+  const focusCard = document.getElementById("focusCard");
+  const focusBackText = document.getElementById("focusBackText");
+
+  let activeFrage = null;
+  const usedFragen = [];
+
+  function renderFannedCards() {
+    cardGrid.innerHTML = "";
+    const remainingFragen = fragen.filter(f => !usedFragen.includes(f));
+    const total = remainingFragen.length;
+    const centerX = cardGrid.offsetWidth / 2;
+    const radius = 280;
+
+    remainingFragen.forEach((frage, i) => {
+      const angle = (-total / 2 + i) * 10;
+      const radians = angle * (Math.PI / 180);
+
+      const card = document.createElement("div");
+      card.className = "card";
+      card.style.left = `${centerX - 90 + radius * Math.sin(radians)}px`;
+      card.style.top = `100px`;
+      card.style.transform = `rotate(${angle}deg)`;
+
+      const cardInner = document.createElement("div");
+      cardInner.className = "card-inner";
+
+      const front = document.createElement("div");
+      front.className = "card-front";
+
+      const back = document.createElement("div");
+      back.className = "card-back";
+      back.textContent = frage;
+
+      cardInner.appendChild(front);
+      cardInner.appendChild(back);
+      card.appendChild(cardInner);
+
+      card.addEventListener("click", () => {
+        activeFrage = frage;
+        focusBackText.textContent = frage;
+        focusCard.style.display = "block";
+        blurOverlay.style.display = "block";
+      });
+
+      cardGrid.appendChild(card);
+    });
+  }
+
+  focusCard.addEventListener("click", () => {
+    moveToUsedStack(activeFrage);
+    focusCard.style.display = "none";
+    blurOverlay.style.display = "none";
+    activeFrage = null;
+  });
+
+  function moveToUsedStack(frage) {
+    usedFragen.push(frage);
+    renderFannedCards();
+
+    const card = document.createElement("div");
+    card.className = "stacked-card";
+    card.textContent = frage;
+
+    const rotation = (Math.random() - 0.5) * 20;
+    card.style.transform = `rotate(${rotation}deg)`;
+    card.style.left = `${5 * usedFragen.length}px`;
+    card.style.top = `${5 * usedFragen.length}px`;
+
+    usedStack.appendChild(card);
+  }
+
+  renderFannedCards();
+</script>
+
+</body>
+</html>
